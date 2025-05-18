@@ -156,12 +156,13 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
             count += 1
             best_attribute = -1
             cut: Cut = Cut()
-            for attribute in range(1):#len(self.X[0])):
+            # print("WHILE LOOP NEXT ITER")
+            for attribute in range(len(self.X[0])):
                 cut: Cut = self.find_best_cut(attribute)
                 if cut.empirical_risk < best_cut.empirical_risk - EPSILON:
                     best_cut = cut
                     best_attribute = attribute
-            print(best_attribute)
+            # print(best_attribute)
 
             if best_attribute == -1 or not best_cut.exists:
                 creating = False
@@ -169,7 +170,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                 rule.add_condition(best_attribute, best_cut.value, best_cut.direction,
                                    self.attribute_names[best_attribute])
                 self.mark_covered_instances(best_attribute, best_cut)
-                creating=False
+                # creating=False
         if best_cut.exists:
 
             decision = self.compute_decision()
@@ -301,11 +302,11 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
 
             elif self.optimized_searching_for_cut == 0:
                 i = len(self.X) - 1 if cut_direction == GREATER_EQUAL else 0
-                print(i)
+                # print("i:", i)
                 previous_position = self.inverted_list[attribute][i]
-                print(previous_position)
+                # print("Prevpos:", previous_position)
                 previous_value = self.X[previous_position][attribute]
-                print(previous_value)
+                # print("Prevval:", previous_value)
                 count = 0
                 while (cut_direction == GREATER_EQUAL and i >= 0) or (
                         cut_direction != GREATER_EQUAL and i < len(self.X)):
@@ -322,16 +323,16 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                                     best_cut.value = (previous_value + curr_value) / 2
                                     best_cut.empirical_risk = temp_empirical_risk
                                     best_cut.exists = True
-                            if best_cut.empirical_risk != 0.0:
-                                print("========================")
-                                print(count)
-                                print(previous_value, curr_value)
-                                print(temp_empirical_risk)
-                                print(best_cut.direction)
-                                print(best_cut.value)
-                                print(best_cut.empirical_risk)
-                                print(best_cut.exists)
-                                print("------------------------")
+                            # if best_cut.empirical_risk != 0.0:
+                            #     print("========================")
+                            #     print("C:", count)
+                            #     print("PV, CV:", previous_value, curr_value)
+                            #     print("TER:", temp_empirical_risk)
+                            #     print("D:", best_cut.direction)
+                            #     print("V:", best_cut.value)
+                            #     print("ER:", best_cut.empirical_risk)
+                            #     print("E:", best_cut.exists)
+                            #     print("------------------------")
 
                             temp_empirical_risk = self.compute_current_empirical_risk(
                                 curr_position, self.covered_instances[curr_position] * weight)

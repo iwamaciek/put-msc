@@ -151,6 +151,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
             inv_list=cython.int[:,:],
             attribute=cython.int,
             xsize=cython.int,
+            n_attributes=cython.int,
             X_view=cython.double[:,:],
             covered_instances_view=cython.int[:],
             y_view=cython.int[:],
@@ -202,7 +203,8 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         INSTANCE_WEIGHT_L = INSTANCE_WEIGHT
         Rp_L = Rp
         count: int = 0
-        xsize = len(self.X[0])
+        n_attributes: int = len(self.X[0])
+        xsize = len(self.X)
         X_view = self.X
         y_view = self.y
         inv_list = self.inverted_list
@@ -214,14 +216,15 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
             # count += 1
             best_attribute = -1
             # cut: Cut = Cut()
+            # print("WHILE LOOP NEXT ITER")
             # Cython parallelism
-            decisions = np.zeros(xsize, dtype=np.intc)
-            positions = np.zeros(xsize, dtype=np.intc)
-            directions = np.zeros(xsize, dtype=np.intc)
-            values = np.zeros(xsize, dtype=np.float64)
-            empirical_risks = np.zeros(xsize, dtype=np.float64)
-            existss = np.zeros(xsize, dtype=np.bool_)
-            for attribute in range(1):#xsize):
+            decisions = np.zeros(n_attributes, dtype=np.intc)
+            positions = np.zeros(n_attributes, dtype=np.intc)
+            directions = np.zeros(n_attributes, dtype=np.intc)
+            values = np.zeros(n_attributes, dtype=np.float64)
+            empirical_risks = np.zeros(n_attributes, dtype=np.float64)
+            existss = np.zeros(n_attributes, dtype=np.bool_)
+            for attribute in prange(n_attributes, nogil=True):
                 best_cut_decision: np.intc = 0
                 best_cut_position: np.intc = -1
                 best_cut_direction: np.intc = 0
@@ -247,14 +250,14 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                         i: np.intc = xsize - 1 
                     else:
                         i: np.intc = 0
-                    print(i)
+                    # print("i:", i)
                     previous_position = inv_list[attribute][i]
-                    print(previous_position)
+                    # print("Prevpos:", previous_position)
                     previous_value = X_view[previous_position][attribute]
-                    print(previous_value)
-                    count_a = 0
+                    # print("Prevval:", previous_value)
+                    # count_a = 0
                     while (cut_direction == GREATER_EQUAL and i >= 0) or (cut_direction != GREATER_EQUAL and i < xsize):
-                        count_a += 1
+                        # count_a += 1
                         curr_position = inv_list[attribute][i]
                         if covered_instances_view[curr_position] == 1:
                             if True:
@@ -267,16 +270,16 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                                         best_cut_value = (previous_value + curr_value) / 2
                                         best_cut_empirical_risk = temp_empirical_risk
                                         best_cut_exists = True
-                                if best_cut_empirical_risk != 0.0:
-                                    print("========================")
-                                    print(count_a)
-                                    print(previous_value, curr_value)
-                                    print(temp_empirical_risk)
-                                    print(best_cut_direction)
-                                    print(best_cut_value)
-                                    print(best_cut_empirical_risk)
-                                    print(best_cut_exists)
-                                    print("------------------------")
+                                # if best_cut_empirical_risk != 0.0:
+                                    # print("========================")
+                                    # print("C:", count_a)
+                                    # print("PV, CV:", previous_value, curr_value)
+                                    # print("TER:", temp_empirical_risk)
+                                    # print("D:", best_cut_direction)
+                                    # print("V:", best_cut_value)
+                                    # print("ER:", best_cut_empirical_risk)
+                                    # print("E:", best_cut_exists)
+                                    # print("------------------------")
 
                                 if PRE_CHOSEN_K_L:
                                     if y_view[curr_position] == max_k:
@@ -303,36 +306,37 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                 empirical_risks[attribute] = best_cut_empirical_risk
                 existss[attribute] = best_cut_exists
 
-            curr_best_attribute = np.argmin(empirical_risks)
+            # curr_best_attribute = np.argmin(empirical_risks)
             # print(curr_best_attribute, np.min(empirical_risks), best_cut.empirical_risk)
-            if empirical_risks[curr_best_attribute] < best_cut.empirical_risk - EPSILON:
-                # print(curr_best_attribute)
-                best_cut.decision = decisions[curr_best_attribute]
-                best_cut.position = positions[curr_best_attribute]
-                best_cut.direction = directions[curr_best_attribute]
-                best_cut.value = values[curr_best_attribute]
-                best_cut.empirical_risk = empirical_risks[curr_best_attribute]
-                best_cut.exists = existss[curr_best_attribute]
-                best_attribute = curr_best_attribute
-                print("inif", best_attribute)
-            print("outif", best_attribute)
+            for curr_best_attribute in range(n_attributes):
+                if empirical_risks[curr_best_attribute] < best_cut.empirical_risk - EPSILON:
+                    # print(curr_best_attribute)
+                    best_cut.decision = decisions[curr_best_attribute]
+                    best_cut.position = positions[curr_best_attribute]
+                    best_cut.direction = directions[curr_best_attribute]
+                    best_cut.value = values[curr_best_attribute]
+                    best_cut.empirical_risk = empirical_risks[curr_best_attribute]
+                    best_cut.exists = existss[curr_best_attribute]
+                    best_attribute = curr_best_attribute
+            #     print("inif", best_attribute)
+            # print("outif", best_attribute)
 
             if best_attribute == -1 or not best_cut.exists:
-                print("STOP")
+                # print("STOP")
                 creating = False
             else:
-                print("ELSE")
+                # print("ELSE")
                 # print(best_attribute, best_cut.value, best_cut.empirical_risk, best_cut.exists)
                 rule.add_condition(best_attribute, best_cut.value, best_cut.direction,
                                    self.attribute_names[best_attribute])
                 self.mark_covered_instances(best_attribute, best_cut)
                 # print("Not covered:", len(self.X)-sum(self.covered_instances))
-                creating=False
+                # creating=False
         if best_cut.exists:
 
             
             decision = self.compute_decision()
-            print(decision)
+            # print(decision)
             if decision is None:
                 return None
 
