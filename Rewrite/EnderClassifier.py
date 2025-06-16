@@ -64,7 +64,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         self.hessians: list[float] = None
         self.inverted_list: list = None
         self.indices_for_better_cuts: list[int] = None
-        self.max_k: int = None
+        self.max_k: int = None # The class for which the gradient is the biggest
         self.effective_rules: list = None
 
         plt.style.use('ggplot')
