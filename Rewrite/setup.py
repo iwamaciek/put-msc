@@ -32,6 +32,12 @@ setup(
 )
 
 setup(
+    name="Ender Classifier Bounded Fast",
+    ext_modules=cythonize("EnderClassifierBoundedFast.py", language_level=3, annotate=True),
+    include_dirs=[numpy.get_include()],
+)
+
+setup(
     name="Ender Classifier Modified",
     ext_modules=cythonize(ext_modules, language_level=3, annotate=True),
     include_dirs=[numpy.get_include()],

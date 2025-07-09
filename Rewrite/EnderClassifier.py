@@ -468,6 +468,13 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         X = check_array(X)
         predictions = [self.predict_instance(x, use_effective_rules) for x in X]
         return predictions
+    
+    def predict_proba(self, X: np.ndarray, use_effective_rules: bool = True) -> np.ndarray:
+        X = check_array(X)
+        predictions = self.predict(X, use_effective_rules)
+        exps = np.exp(predictions - np.max(predictions, axis=1, keepdims=True))
+        probabilities = exps / np.sum(exps, axis=1, keepdims=True)
+        return probabilities
 
     def predict_instance(self, x: np.ndarray, use_effective_rules: bool) -> np.ndarray:
         value_of_f_instance = np.array(self.default_rule)

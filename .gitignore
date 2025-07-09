@@ -9,3 +9,4 @@ Testing/
 *.so
 *.html
 *.pdf
+*.pyd
