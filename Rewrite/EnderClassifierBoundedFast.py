@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 import os
 import cython
 # from cython.parallel import prange
+from time import time
 
 
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -55,7 +56,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         self.num_classes: int = None
         self.value_of_f: list[list[float]] = None
         self.probability: np.ndarray = None
-        self.default_rule: Rule = None
+        self.default_rule: np.ndarray = None
         self.covered_instances: list[int] = None
         self.instances_covered_by_current_rule: np.ndarray = None
         self.last_index_computation_of_empirical_risk: int = None
@@ -96,7 +97,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         self.create_inverted_list(X)
         self.covered_instances: np.ndarray[np.intc] = np.array([1 for _ in range(len(X))], dtype=np.intc)
 
-        self.default_rule: Rule = self.create_default_rule()
+        self.default_rule: np.ndarray = self.create_default_rule()
         self.rules: list[Rule] = []
         self.update_value_of_f(self.default_rule)
         if self.verbose: print("Default rule:", self.default_rule)
@@ -105,7 +106,10 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
             if self.verbose:
                 print('####################################################################################')
                 print(f"Rule: {i_rule + 1}")
-            self.calculate_squared_errors()
+            start = time()
+            self.squared_error_array = self.calculate_squared_errors()
+            if self.verbose:
+                print(f"Squared errors calculated in {time() - start:.4f} seconds")
             self.covered_instances: np.ndarray[np.intc] = self.resampling()
             rule: Rule = self.create_rule()
 
@@ -148,63 +152,64 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                 result[index] = 1
         return np.array(result, dtype=np.intc)
     
-    def weighted_1d_kmeans(self, y_means, weights, max_clusters):
-        """
-        Optimized weighted 1D k-means using dynamic programming and precomputed costs.
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.locals(
+        i=cython.int,
+        j=cython.int,
+        k=cython.int,
+        w=cython.double,
+        y_sum=cython.double,
+        y2_sum=cython.double,
+        mean=cython.double,
+        n=cython.int,
+        prefix_w_view=cython.double[:],
+        prefix_y_view=cython.double[:],
+        prefix_y2_view=cython.double[:],
+        cost_view=cython.double[:,:],
+        dp_view=cython.double[:,:],
+    )
+    def weighted_1d_kmeans(self, y_means: np.ndarray, weights: np.ndarray, max_clusters: int) -> np.float64:
+        n = y_means.shape[0]
 
-        Parameters:
-        - y_means: list or array of representative target values
-        - weights: list or array of weights (same length as y_means)
-        - max_clusters: max number of clusters allowed (K)
-
-        Returns:
-        - minimum k-means loss using up to max_clusters
-        """
-        y_means = np.asarray(y_means, dtype=np.float64)
-        weights = np.asarray(weights, dtype=np.float64)
-        n = len(y_means)
-
-        # Step 1: Vectorized prefix sums
-        prefix_w = np.zeros(n + 1)
-        prefix_y = np.zeros(n + 1)
-        prefix_y2 = np.zeros(n + 1)
+        prefix_w = np.zeros(n + 1, dtype=np.float64)
+        prefix_y = np.zeros(n + 1, dtype=np.float64)
+        prefix_y2 = np.zeros(n + 1, dtype=np.float64)
 
         prefix_w[1:] = np.cumsum(weights)
         prefix_y[1:] = np.cumsum(weights * y_means)
-        prefix_y2[1:] = np.cumsum(weights * y_means**2)
+        prefix_y2[1:] = np.cumsum(weights * y_means ** 2)
 
-        # Step 2: Precompute segment cost matrix
-        cost = np.zeros((n, n))  # cost[i][j] = cost for interval [i, j]
+        prefix_w_view = prefix_w
+        prefix_y_view = prefix_y
+        prefix_y2_view = prefix_y2
+
+        dp = np.full((max_clusters + 1, n + 1), np.inf, dtype=np.float64)
+        dp_view = dp
+
+        cost = np.zeros((n, n), dtype=np.float64)
+        cost_view = cost
+
         for i in range(n):
             for j in range(i, n):
-                w = prefix_w[j + 1] - prefix_w[i]
+                w = prefix_w_view[j + 1] - prefix_w_view[i]
                 if w == 0:
-                    cost[i][j] = 0
+                    cost_view[i, j] = 0
                 else:
-                    y_sum = prefix_y[j + 1] - prefix_y[i]
-                    y2_sum = prefix_y2[j + 1] - prefix_y2[i]
+                    y_sum = prefix_y_view[j + 1] - prefix_y_view[i]
+                    y2_sum = prefix_y2_view[j + 1] - prefix_y2_view[i]
                     mean = y_sum / w
-                    cost[i][j] = y2_sum - 2 * mean * y_sum + w * mean ** 2
+                    cost_view[i, j] = y2_sum - 2 * mean * y_sum + w * mean * mean
 
-        # Step 3: Dynamic programming
-        dp = np.full((max_clusters + 1, n + 1), np.inf)
-        dp[0][0] = 0.0
-
+        dp_view[0, 0] = 0.0
         for k in range(1, max_clusters + 1):
             for j in range(1, n + 1):
                 for i in range(j):
-                    dp[k][j] = min(dp[k][j], dp[k - 1][i] + cost[i][j - 1])
+                    dp_view[k, j] = min(dp_view[k, j], dp_view[k - 1, i] + cost_view[i, j - 1])
 
-        return np.min(dp[1:max_clusters + 1, n])
-
-    def compute_class_weights(self, y_subset):
-        unique, counts = np.unique(y_subset, return_counts=True)
-        freq = dict(zip(unique, counts))
-        total = len(y_subset)
-        weights = {cls: total / (len(freq) * count) for cls, count in freq.items()}
-        return weights
-
-    def compute_rule_lower_bound(self, X_subset, residuals, y_subset, lambda_reg=0.0, max_clusters=4):
+        return np.min(dp_view[1:max_clusters + 1, n])
+    
+    def compute_rule_lower_bound(self, X_subset: np.ndarray, residuals: np.ndarray, y_subset: np.ndarray, lambda_reg:float=0.0, max_clusters:int=4):
         """
         Compute the k-Means Equivalent Points Lower Bound for a partial rule's coverage.
         
@@ -217,21 +222,24 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         Returns:
         - lower_bound: float
         """
-        equivalence_map = defaultdict(list)
+        equivalence_map: defaultdict = defaultdict(list)
         
         for x, r in zip(X_subset, residuals):
-            key = tuple(x)
+            key: tuple = tuple(x)
             equivalence_map[key].append(r)
 
-        y_means = []
-        weights = []
+        y_means: list[np.float64] = []
+        weights: list[int] = []
 
         for group in equivalence_map.values():
             weights.append(len(group))
-            y_means.append(np.mean(group))
+            y_means.append(np.mean(group, dtype=np.float64))
+
+        y_means_array: np.ndarray = np.array(y_means, dtype=np.float64)
+        weights_array: np.ndarray = np.array(weights, dtype=np.float64)
 
         # Lower bound via k-means loss
-        kmeans_loss = self.weighted_1d_kmeans(y_means, weights, max_clusters)
+        kmeans_loss: np.float64 = self.weighted_1d_kmeans(y_means_array, weights_array, max_clusters)
 
         # Correction: actual vs compressed squared sums
         original_total = np.sum(np.square(residuals))
@@ -242,9 +250,17 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
     
     @cython.locals(
             squared_errors=cython.double[:,:],
-            logits=cython.double[:,:],
+            # logits=cython.double[:,:],
             i=cython.int,
             rule_id=cython.int,
+            X_view=cython.double[:,:],
+            xsize=cython.int,
+            nrules=cython.int,
+            y_view=cython.int[:],
+            num_classes=cython.int,
+            default_rule=cython.double[:,:],
+            squared_errors_internal=cython.double[:],
+            mses= cython.double[:],
     )
     def calculate_squared_errors(self) -> np.ndarray:
         """
@@ -260,30 +276,39 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         def mse_from_logits(logits: np.ndarray, y_true: np.ndarray, num_classes: int) -> np.ndarray:
             probs: np.ndarray = softmax(logits)  # shape: (n_samples, n_classes)
             y_onehot: np.ndarray = one_hot(y_true, num_classes)  # shape: (n_samples, n_classes)
-            squared_errors: np.ndarray = np.mean((probs - y_onehot) ** 2, axis=1)
-            return squared_errors
+            squared_errors_internal: np.ndarray = np.mean((probs - y_onehot) ** 2, axis=1)
+            return squared_errors_internal
 
-        squared_errors = np.zeros((len(self.rules) + 1, len(self.X)), dtype=np.float64)
-        squared_errors[0,:] = mse_from_logits(np.array(self.default_rule), self.y, self.num_classes)
+        X_view = self.X
+        xsize = len(X_view)
+        nrules = len(self.rules)
+        num_classes = self.num_classes
+        y_view = self.y
+        default_rule = self.default_rule.reshape(1, -1)  # Reshape to (1, num_classes)
+
+        squared_errors = np.zeros((nrules + 1, xsize), dtype=np.float64)
+        mses = mse_from_logits(default_rule, y_view, num_classes)
+        for i in range(xsize):
+            squared_errors[0, i] = mses[i]
         if self.rules:
-            rule_id = 0
-            for rule in self.rules:
-                logits = np.zeros((len(self.X), self.num_classes), dtype=np.float64)
-                for i in range(len(self.X)):
-                    logits[i,:] = rule.classify_instance(self.X[i])
-                print(np.mean(mse_from_logits(logits, self.y, self.num_classes)))
-                squared_errors[rule_id+1,:] = mse_from_logits(logits, self.y, self.num_classes)
+            for rule_id in range(nrules):
+                logits = np.zeros((xsize, num_classes), dtype=np.float64)
+                for i in range(xsize):
+                    logits[i,:] = self.rules[rule_id].classify_instance(self.X[i])
+                mses = mse_from_logits(logits, y_view, num_classes)
+                for i in range(xsize):
+                    squared_errors[rule_id + 1, i] = mses[i]
                 rule_id += 1
         squared_errors = np.array(squared_errors, dtype=np.float64)
-        print(squared_errors)
         if self.verbose:
             for i in range(len(squared_errors)):
                 if i == 0:
                     print(f"Default Rule: MSE = {np.mean(squared_errors[i])}")
                 else:
                     print(f"Rule {i-1}: MSE = {np.mean(squared_errors[i])}")
-        self.squared_error_array = squared_errors
-        return squared_errors
+        squared_errors_numpy = np.array(squared_errors, dtype=np.float64)
+        # self.squared_error_array = squared_errors_numpy
+        return squared_errors_numpy
 
 
     def get_best_rule_loss(self, instances_covered_by_current_rule) -> float:
@@ -293,8 +318,9 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         - best_rule_loss: float, the empirical risk of the best rule
         """
         best_rule_loss = np.inf
-        mses = np.mean(self.squared_error_array[:, instances_covered_by_current_rule == 1], axis=1)
-        best_rule_loss = np.min(mses)
+        a = self.squared_error_array[:, instances_covered_by_current_rule == 1]
+        mses_l = np.mean(a, axis=1)
+        best_rule_loss = np.min(mses_l)
         return best_rule_loss
 
     @cython.locals(
@@ -454,18 +480,21 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                                    self.attribute_names[best_attribute])
                 self.mark_covered_instances(best_attribute, best_cut)
                 # Verify lower bound for the empirical risk with more cuts
+                # start = time()
                 lower_bound = self.compute_rule_lower_bound(
-                    X_subset=X_view[self.instances_covered_by_current_rule == 1],
+                    X_subset=self.X[self.instances_covered_by_current_rule == 1],
                     residuals=[y_view[i] - self.value_of_f[i][max_k] for i in range(xsize) if
                                self.instances_covered_by_current_rule[i] == 1],
-                    y_subset=y_view[self.instances_covered_by_current_rule == 1],
+                    y_subset=self.y[self.instances_covered_by_current_rule == 1],
                     lambda_reg=0.01, max_clusters=5)
+                # if self.verbose:
+                #     print(f"Lower bound computed in {time() - start:.4f} seconds, value: {lower_bound}")
                 best_rule_loss = self.get_best_rule_loss(self.instances_covered_by_current_rule)
                 if lower_bound < best_rule_loss:
                     if False:
                         print(f"Lower bound {lower_bound} is less than empirical risk {best_rule_loss} for rule with {len(rule.conditions)} conditions. Continuing search.")
                 else:
-                    if True:
+                    if self.verbose and False:
                         print(f"Lower bound {lower_bound} is greater than or equal to empirical risk {best_rule_loss} for rule with {len(rule.conditions)} conditions. Stopping search.")
                     creating = False
         if best_cut.exists:
@@ -674,14 +703,14 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         else:
             raise
 
-    def create_default_rule(self):
+    def create_default_rule(self) -> np.ndarray:
         self.initialize_for_rule()
-        decision = self.compute_decision()
+        decision: np.ndarray = self.compute_decision()
         for i in range(self.num_classes):
             decision[i] *= self.nu
         return decision
 
-    def compute_decision(self):
+    def compute_decision(self) -> np.ndarray | None:
         if PRE_CHOSEN_K:
             hessian = R
             gradient = 0
@@ -700,6 +729,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
             alpha_nr = gradient / hessian
             decision = [- alpha_nr / self.num_classes for _ in range(self.num_classes)]
             decision[self.max_k] = alpha_nr * (self.num_classes - 1) / self.num_classes
+            decision = np.array(decision, dtype=np.float64)
             return decision
         else:
             raise

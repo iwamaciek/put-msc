@@ -6,6 +6,7 @@ from tqdm import tqdm
 from matplotlib import pyplot as plt
 import os
 import cython
+from time import time
 
 
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -106,7 +107,10 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                 print('####################################################################################')
                 print(f"Rule: {i_rule + 1}")
             # self.best_rule_loss = self.get_best_rule_loss()
+            start = time()
             self.calculate_squared_errors()
+            if self.verbose:
+                print(f"Squared errors calculated in {time() - start:.4f} seconds")
             self.covered_instances: list[int] = self.resampling()
             rule: Rule = self.create_rule()
 
@@ -348,12 +352,15 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                                    self.attribute_names[best_attribute])
                 self.mark_covered_instances(best_attribute, best_cut)
                 # Verify lower bound for the empirical risk with more cuts
+                start = time()
                 lower_bound = self.compute_rule_lower_bound(
                     X_subset=self.X[self.instances_covered_by_current_rule == 1],
                     residuals=[self.y[i] - self.value_of_f[i][self.max_k] for i in range(len(self.X)) if
                                self.instances_covered_by_current_rule[i] == 1],
                     y_subset=self.y[self.instances_covered_by_current_rule == 1],
                     lambda_reg=0.01, max_clusters=5)
+                if self.verbose:
+                    print(f"Lower bound computed in {time() - start:.4f} seconds, value: {lower_bound}")
                 best_rule_loss = self.get_best_rule_loss(self.instances_covered_by_current_rule)
                 if lower_bound < best_rule_loss:
                     if False:
