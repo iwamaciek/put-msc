@@ -27,7 +27,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
     pool = None
 
     def __init__(self, dataset_name: str = None, n_rules: int = 100, use_gradient: bool = True, optimized_searching_for_cut: bool = False, nu: float = 1,
-                 sampling: float = 1, verbose: bool = True, random_state: int = 42):
+                 sampling: float = 1, verbose: bool = True, random_state: int = 42, max_clusters: int = 4, lambda_reg: float = 0.0):
         self.dataset_name: str = dataset_name
         self.n_rules: int = n_rules
         self.rules: list[Rule] = []
@@ -35,6 +35,8 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         self.use_gradient: bool = use_gradient
         self.nu: float = nu
         self.sampling: float = sampling
+        self.max_clusters: int = max_clusters
+        self.lambda_reg: float = lambda_reg
 
         self.verbose: bool = verbose
         self.random_state: int = random_state
@@ -106,10 +108,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
             if self.verbose:
                 print('####################################################################################')
                 print(f"Rule: {i_rule + 1}")
-            start = time()
             self.squared_error_array = self.calculate_squared_errors()
-            if self.verbose:
-                print(f"Squared errors calculated in {time() - start:.4f} seconds")
             self.covered_instances: np.ndarray[np.intc] = self.resampling()
             rule: Rule = self.create_rule()
 
@@ -209,6 +208,8 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
 
         return np.min(dp_view[1:max_clusters + 1, n])
     
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
     def compute_rule_lower_bound(self, X_subset: np.ndarray, residuals: np.ndarray, y_subset: np.ndarray, lambda_reg:float=0.0, max_clusters:int=4):
         """
         Compute the k-Means Equivalent Points Lower Bound for a partial rule's coverage.
@@ -222,18 +223,17 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         Returns:
         - lower_bound: float
         """
-        equivalence_map: defaultdict = defaultdict(list)
-        
-        for x, r in zip(X_subset, residuals):
-            key: tuple = tuple(x)
-            equivalence_map[key].append(r)
+        X_view = X_subset.view([('', X_subset.dtype)] * X_subset.shape[1])
+        _, inv, counts = np.unique(X_view, return_inverse=True, return_counts=True)
 
-        y_means: list[np.float64] = []
-        weights: list[int] = []
+        num_groups = counts.shape[0]
+        y_means = np.zeros(num_groups, dtype=np.float64)
+        weights = counts.astype(np.float64)
 
-        for group in equivalence_map.values():
-            weights.append(len(group))
-            y_means.append(np.mean(group, dtype=np.float64))
+        for i in range(len(residuals)):
+            y_means[inv[i]] += residuals[i]
+
+        y_means /= weights
 
         y_means_array: np.ndarray = np.array(y_means, dtype=np.float64)
         weights_array: np.ndarray = np.array(weights, dtype=np.float64)
@@ -486,7 +486,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                     residuals=[y_view[i] - self.value_of_f[i][max_k] for i in range(xsize) if
                                self.instances_covered_by_current_rule[i] == 1],
                     y_subset=self.y[self.instances_covered_by_current_rule == 1],
-                    lambda_reg=0.01, max_clusters=5)
+                    lambda_reg=self.lambda_reg, max_clusters=self.max_clusters)
                 # if self.verbose:
                 #     print(f"Lower bound computed in {time() - start:.4f} seconds, value: {lower_bound}")
                 best_rule_loss = self.get_best_rule_loss(self.instances_covered_by_current_rule)

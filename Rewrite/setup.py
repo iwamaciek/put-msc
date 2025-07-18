@@ -28,13 +28,13 @@ ext_modules = [
         # extra_compile_args=["-fopenmp"],
         # extra_link_args=["-fopenmp"],
         language_level=3,
-        annotate=False
+        annotate=True
     )
 ]
 
 setup(
     name="Ender Classifier Bounded Fast",
-    ext_modules=cythonize(ext_modules),
+    ext_modules=cythonize(ext_modules, language_level=3, annotate=True),
     include_dirs=[numpy.get_include()],
 )
 
