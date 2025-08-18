@@ -95,9 +95,11 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         self.create_rules(X)
 
         self.is_fitted_: bool = True
-        print(f"Total training time: {time.perf_counter() - global_start:.5f} seconds")
+        total_time = time.perf_counter() - global_start
+        if self.verbose:
+            print(f"Total training time: {total_time:.5f} seconds")
 
-        return self.rule_times, self.rule_total_times
+        return self.rule_times, self.rule_total_times, total_time
 
     def create_rules(self, X: np.ndarray):
         self.create_inverted_list(X)
@@ -105,7 +107,8 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
 
         default_start = time.perf_counter()
         self.default_rule: np.ndarray = self.create_default_rule()
-        print(f"Default rule creation time: {time.perf_counter() - default_start:.5f} seconds")
+        if self.verbose:
+            print(f"Default rule creation time: {time.perf_counter() - default_start:.5f} seconds")
         self.rules: list[Rule] = []
         self.update_value_of_f(self.default_rule)
         if self.verbose: print("Default rule:", self.default_rule)
@@ -127,7 +130,8 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
             rule_end = time.perf_counter()
             self.rule_times.append(rule_end - rule_start)
             self.rule_total_times.append(rule_end - start_time)
-            print(f"Rule {i_rule} creation time: {self.rule_times[-1]:.5f} seconds, total: {self.rule_total_times[-1]:.5f} seconds")
+            if self.verbose:
+                print(f"Rule {i_rule} creation time: {self.rule_times[-1]:.5f} seconds, total: {self.rule_total_times[-1]:.5f} seconds")
             # else:
             #     break
 
