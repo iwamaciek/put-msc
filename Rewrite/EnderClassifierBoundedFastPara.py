@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 import os
 import cython
 import time
+from cython.parallel import prange # type: ignore
 
 
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -408,7 +409,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
             values = np.zeros(n_attributes, dtype=np.float64)
             empirical_risks = np.zeros(n_attributes, dtype=np.float64)
             existss = np.zeros(n_attributes, dtype=np.bool_)
-            for attribute in range(n_attributes):#, nogil=True):
+            for attribute in prange(n_attributes, nogil=True):
                 best_cut_decision: np.intc = 0
                 best_cut_position: np.intc = -1
                 best_cut_direction: np.intc = 0

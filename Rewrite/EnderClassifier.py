@@ -6,6 +6,7 @@ from tqdm import tqdm
 from matplotlib import pyplot as plt
 import os
 import cython
+import time
 
 
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -70,6 +71,9 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         plt.style.use('ggplot')
 
     def fit(self, X: np.ndarray, y: np.ndarray, X_test: np.ndarray = None, y_test: np.ndarray = None) -> None:
+        global_start = time.perf_counter()
+        self.rule_times = []
+        self.rule_total_times = []
         self.attribute_names: list[str] = X.columns
         X, y = check_X_y(X, y)
         if X_test is not None and y_test is not None:
@@ -86,22 +90,27 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         self.create_rules(X)
 
         self.is_fitted_: bool = True
+        print(f"Total training time: {time.perf_counter() - global_start:.5f} seconds")
 
-        return None
+        return self.rule_times, self.rule_total_times
 
     def create_rules(self, X: np.ndarray):
         self.create_inverted_list(X)
         self.covered_instances: list[int] = [1 for _ in range(len(X))]
 
+        default_start = time.perf_counter()
         self.default_rule: Rule = self.create_default_rule()
+        print(f"Default rule creation time: {time.perf_counter() - default_start:.5f} seconds")
         self.rules: list[Rule] = []
         self.update_value_of_f(self.default_rule)
         if self.verbose: print("Default rule:", self.default_rule)
         i_rule = 0
+        start_time = time.perf_counter()
         while i_rule < self.n_rules:
             if self.verbose:
                 print('####################################################################################')
                 print(f"Rule: {i_rule + 1}")
+            rule_start = time.perf_counter()
             self.covered_instances: list[int] = self.resampling()
             rule: Rule = self.create_rule()
 
@@ -109,6 +118,10 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                 self.update_value_of_f(rule.decision)
                 self.rules.append(rule)
                 i_rule += 1
+            rule_end = time.perf_counter()
+            self.rule_times.append(rule_end - rule_start)
+            self.rule_total_times.append(rule_end - start_time)
+            print(f"Rule {i_rule} creation time: {self.rule_times[-1]:.5f} seconds, total: {self.rule_total_times[-1]:.5f} seconds")
 
     def resampling(self) -> list[int]:
         count: Counter = Counter(self.y)

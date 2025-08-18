@@ -4,44 +4,26 @@ import numpy
 
 setup(
     name="ender-rewrite",
-    ext_modules=cythonize("*.pyx", language_level=3, annotate=True),
+    ext_modules=cythonize("*.pyx", language_level=3, annotate=False),
     include_dirs=[numpy.get_include()],
 )
 
 setup(
     name="Ender Classifier",
-    ext_modules=cythonize("EnderClassifier.py", language_level=3, annotate=True),
+    ext_modules=cythonize("EnderClassifier.py", language_level=3, annotate=False),
     include_dirs=[numpy.get_include()],
 )
 
 setup(
     name="Ender Regressor",
-    ext_modules=cythonize("EnderRegressor.py", language_level=3, annotate=True),
+    ext_modules=cythonize("EnderRegressor.py", language_level=3, annotate=False),
     include_dirs=[numpy.get_include()],
 )
 
 ext_modules = [
     Extension(
-        "EnderClassifierBoundedFast",
-        ["EnderClassifierBoundedFast.py"],
-        extra_compile_args=["/openmp"],
-        # extra_compile_args=["-fopenmp"],
-        # extra_link_args=["-fopenmp"],
-        language_level=3,
-        annotate=True
-    )
-]
-
-setup(
-    name="Ender Classifier Bounded Fast",
-    ext_modules=cythonize(ext_modules, language_level=3, annotate=True),
-    include_dirs=[numpy.get_include()],
-)
-
-ext_modules = [
-    Extension(
-        "EnderClassifierModified",
-        ["EnderClassifierModified.py"],
+        "EnderClassifierBoundedFastPara",
+        ["EnderClassifierBoundedFastPara.py"],
         extra_compile_args=["/openmp"],
         # extra_compile_args=["-fopenmp"],
         # extra_link_args=["-fopenmp"],
@@ -51,7 +33,37 @@ ext_modules = [
 ]
 
 setup(
+    name="Ender Classifier Bounded Fast Parallel",
+    ext_modules=cythonize(ext_modules, language_level=3, annotate=False),
+    include_dirs=[numpy.get_include()],
+)
+
+setup(
+    name="Ender Classifier Bounded Fast",
+    ext_modules=cythonize("EnderClassifierBoundedFast.py", language_level=3, annotate=False),
+    include_dirs=[numpy.get_include()],
+)
+
+setup(
     name="Ender Classifier Modified",
-    ext_modules=cythonize(ext_modules),
+    ext_modules=cythonize("EnderClassifierModified.py", language_level=3, annotate=False),
+    include_dirs=[numpy.get_include()],
+)
+
+ext_modules = [
+    Extension(
+        "EnderClassifierModifiedPara",
+        ["EnderClassifierModifiedPara.py"],
+        extra_compile_args=["/openmp"],
+        # extra_compile_args=["-fopenmp"],
+        # extra_link_args=["-fopenmp"],
+        language_level=3,
+        annotate=False
+    )
+]
+
+setup(
+    name="Ender Classifier Modified Parallel",
+    ext_modules=cythonize(ext_modules, language_level=3, annotate=False),
     include_dirs=[numpy.get_include()],
 )
