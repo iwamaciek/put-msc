@@ -1,0 +1,142 @@
+[
+    {
+        "n_rules": 15,
+        "nu": 0.99,
+        "sampling": 0.4,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 20,
+        "nu": 1.0,
+        "sampling": 0.9,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 20,
+        "nu": 1.0,
+        "sampling": 0.8,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 20,
+        "nu": 0.99,
+        "sampling": 0.9,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 20,
+        "nu": 0.99,
+        "sampling": 0.8,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 15,
+        "nu": 0.9,
+        "sampling": 0.6,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 20,
+        "nu": 0.95,
+        "sampling": 0.8,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 20,
+        "nu": 1.0,
+        "sampling": 1.0,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 20,
+        "nu": 0.95,
+        "sampling": 1.0,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 20,
+        "nu": 0.99,
+        "sampling": 1.0,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 15,
+        "nu": 1.0,
+        "sampling": 0.6,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 20,
+        "nu": 0.9,
+        "sampling": 1.0,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 20,
+        "nu": 0.9,
+        "sampling": 0.8,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 15,
+        "nu": 0.9,
+        "sampling": 0.4,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 20,
+        "nu": 0.95,
+        "sampling": 0.9,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 15,
+        "nu": 0.95,
+        "sampling": 0.6,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 15,
+        "nu": 0.99,
+        "sampling": 0.6,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 20,
+        "nu": 1.0,
+        "sampling": 0.4,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 15,
+        "nu": 0.95,
+        "sampling": 0.4,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 15,
+        "nu": 1.0,
+        "sampling": 0.4,
+        "use_gradient": true,
+        "verbose": false
+    }
+]
