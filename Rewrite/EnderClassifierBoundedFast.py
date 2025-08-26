@@ -23,8 +23,6 @@ R = 5
 Rp = 1e-5
 
 class EnderClassifier(BaseEstimator, ClassifierMixin):
-    pool = None
-
     def __init__(self, dataset_name = None, n_rules = 100, use_gradient = True, optimized_searching_for_cut = False, nu = 1,
                  sampling = 1, verbose = True, random_state = 42, max_clusters = 4, lambda_reg = 0.0):
         self.dataset_name: str = dataset_name

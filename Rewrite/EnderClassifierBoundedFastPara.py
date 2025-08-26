@@ -24,10 +24,8 @@ R = 5
 Rp = 1e-5
 
 class EnderClassifier(BaseEstimator, ClassifierMixin):
-    pool = None
-
-    def __init__(self, dataset_name: str = None, n_rules: int = 100, use_gradient: bool = True, optimized_searching_for_cut: bool = False, nu: float = 1,
-                 sampling: float = 1, verbose: bool = True, random_state: int = 42, max_clusters: int = 4, lambda_reg: float = 0.0, use_parallelism: bool = True):
+    def __init__(self, dataset_name = None, n_rules = 100, use_gradient = True, optimized_searching_for_cut = False, nu = 1,
+                 sampling = 1, verbose = True, random_state = 42, max_clusters = 4, lambda_reg = 0.0, use_parallelism = True):
         self.dataset_name: str = dataset_name
         self.n_rules: int = n_rules
         self.rules: list[Rule] = []
@@ -805,11 +803,17 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
     def predict(self, X: np.ndarray, use_effective_rules: bool = True) -> list:
         X = check_array(X, ensure_all_finite=False)
         predictions = [self.predict_instance(x, use_effective_rules) for x in X]
+        predictions = [np.argmax(pred) for pred in predictions]
         return predictions
+
+    def predict_logits(self, X: np.ndarray, use_effective_rules: bool = True) -> np.ndarray:
+        X = check_array(X, ensure_all_finite=False)
+        logits = [self.predict_instance(x, use_effective_rules) for x in X]
+        return np.array(logits)
 
     def predict_proba(self, X: np.ndarray, use_effective_rules: bool = True) -> np.ndarray:
         X = check_array(X, ensure_all_finite=False)
-        predictions = self.predict(X, use_effective_rules)
+        predictions = self.predict_logits(X, use_effective_rules)
         exps = np.exp(predictions - np.max(predictions, axis=1, keepdims=True))
         probabilities = exps / np.sum(exps, axis=1, keepdims=True)
         return probabilities
