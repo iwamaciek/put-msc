@@ -1,0 +1,142 @@
+[
+    {
+        "n_rules": 36,
+        "nu": 0.99,
+        "sampling": 0.6,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 26,
+        "nu": 1.0,
+        "sampling": 0.8,
+        "use_gradient": false,
+        "verbose": false
+    },
+    {
+        "n_rules": 28,
+        "nu": 0.95,
+        "sampling": 0.4,
+        "use_gradient": false,
+        "verbose": false
+    },
+    {
+        "n_rules": 21,
+        "nu": 0.99,
+        "sampling": 0.4,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 33,
+        "nu": 0.99,
+        "sampling": 0.6,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 17,
+        "nu": 1.0,
+        "sampling": 0.6,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 16,
+        "nu": 0.95,
+        "sampling": 0.8,
+        "use_gradient": false,
+        "verbose": false
+    },
+    {
+        "n_rules": 22,
+        "nu": 0.99,
+        "sampling": 0.6,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 38,
+        "nu": 0.9,
+        "sampling": 0.8,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 37,
+        "nu": 0.99,
+        "sampling": 0.6,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 10,
+        "nu": 0.99,
+        "sampling": 0.8,
+        "use_gradient": false,
+        "verbose": false
+    },
+    {
+        "n_rules": 29,
+        "nu": 0.99,
+        "sampling": 0.8,
+        "use_gradient": false,
+        "verbose": false
+    },
+    {
+        "n_rules": 26,
+        "nu": 0.9,
+        "sampling": 0.4,
+        "use_gradient": false,
+        "verbose": false
+    },
+    {
+        "n_rules": 37,
+        "nu": 1.0,
+        "sampling": 0.4,
+        "use_gradient": false,
+        "verbose": false
+    },
+    {
+        "n_rules": 13,
+        "nu": 0.99,
+        "sampling": 0.8,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 18,
+        "nu": 1.0,
+        "sampling": 0.4,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 37,
+        "nu": 0.9,
+        "sampling": 0.6,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 26,
+        "nu": 1.0,
+        "sampling": 0.9,
+        "use_gradient": false,
+        "verbose": false
+    },
+    {
+        "n_rules": 14,
+        "nu": 0.99,
+        "sampling": 0.8,
+        "use_gradient": true,
+        "verbose": false
+    },
+    {
+        "n_rules": 34,
+        "nu": 0.99,
+        "sampling": 0.6,
+        "use_gradient": false,
+        "verbose": false
+    }
+]
