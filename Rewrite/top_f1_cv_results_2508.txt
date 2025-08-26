@@ -1,0 +1,17 @@
+Best hyperparameters: {'lambda_reg': 1.0, 'max_clusters': 1, 'n_rules': 39, 'nu': 0.9, 'sampling': 0.8, 'use_gradient': False, 'verbose': False}
+Best cross-val F1: 0.4829869278778136
+
+Test set evaluation:
+              precision    recall  f1-score   support
+
+           0     0.8860    0.9266    0.9058       109
+           1     0.5556    0.4348    0.4878        23
+
+    accuracy                         0.8409       132
+   macro avg     0.7208    0.6807    0.6968       132
+weighted avg     0.8284    0.8409    0.8330       132
+
+Confusion Matrix:
+                    Class 0             Class 1             
+Class 0             101                 8                     # True Negative (TN), False Positive (FP)
+Class 1             13                  10                    # False Negative (FN), True Positive (TP)

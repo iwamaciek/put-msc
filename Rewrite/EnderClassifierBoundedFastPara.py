@@ -27,12 +27,13 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
     pool = None
 
     def __init__(self, dataset_name: str = None, n_rules: int = 100, use_gradient: bool = True, optimized_searching_for_cut: bool = False, nu: float = 1,
-                 sampling: float = 1, verbose: bool = True, random_state: int = 42, max_clusters: int = 4, lambda_reg: float = 0.0):
+                 sampling: float = 1, verbose: bool = True, random_state: int = 42, max_clusters: int = 4, lambda_reg: float = 0.0, use_parallelism: bool = True):
         self.dataset_name: str = dataset_name
         self.n_rules: int = n_rules
         self.rules: list[Rule] = []
 
         self.use_gradient: bool = use_gradient
+        self.use_parallelism: bool = use_parallelism
         self.nu: float = nu
         self.sampling: float = sampling
         self.max_clusters: int = max_clusters
@@ -80,9 +81,9 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         self.rule_times = []
         self.rule_total_times = []
         self.attribute_names: list[str] = X.columns
-        X, y = check_X_y(X, y)
+        X, y = check_X_y(X, y, ensure_all_finite=False)
         if X_test is not None and y_test is not None:
-            X_test, y_test = check_X_y(X_test, y_test)
+            X_test, y_test = check_X_y(X_test, y_test, ensure_all_finite=False)
             self.X_test = X_test
             self.y_test = y_test
         self.X = X.astype(np.float64)
@@ -349,6 +350,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
             y_view=cython.int[:],
             max_k=cython.int,
             use_gradient=cython.bint,
+            use_parallelism=cython.bint,
             probability_view=cython.double[:,:],
             decisions=cython.int[:],
             positions=cython.int[:],
@@ -404,6 +406,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         probability_view = self.probability
         max_k = self.max_k
         use_gradient = self.use_gradient
+        use_parallelism = self.use_parallelism
         while creating:
             # count += 1
             best_attribute = -1
@@ -413,7 +416,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
             values = np.zeros(n_attributes, dtype=np.float64)
             empirical_risks = np.zeros(n_attributes, dtype=np.float64)
             existss = np.zeros(n_attributes, dtype=np.bool_)
-            for attribute in prange(n_attributes, nogil=True):
+            for attribute in prange(n_attributes, nogil=True, use_threads_if=use_parallelism):
                 best_cut_decision: np.intc = 0
                 best_cut_position: np.intc = -1
                 best_cut_direction: np.intc = 0
@@ -800,12 +803,12 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                     self.value_of_f[i][k] += decision[k]
 
     def predict(self, X: np.ndarray, use_effective_rules: bool = True) -> list:
-        X = check_array(X)
+        X = check_array(X, ensure_all_finite=False)
         predictions = [self.predict_instance(x, use_effective_rules) for x in X]
         return predictions
 
     def predict_proba(self, X: np.ndarray, use_effective_rules: bool = True) -> np.ndarray:
-        X = check_array(X)
+        X = check_array(X, ensure_all_finite=False)
         predictions = self.predict(X, use_effective_rules)
         exps = np.exp(predictions - np.max(predictions, axis=1, keepdims=True))
         probabilities = exps / np.sum(exps, axis=1, keepdims=True)
@@ -819,7 +822,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         return value_of_f_instance
 
     def predict_with_specific_rules(self, X: np.ndarray, rule_indices: list) -> np.ndarray:
-        X = check_array(X)
+        X = check_array(X, ensure_all_finite=False)
         preds = []
         for x in X:
             pred = np.array(self.default_rule)
@@ -831,7 +834,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
     def score(self, X, y):
         check_is_fitted(self, 'is_fitted_')
 
-        X, y = check_X_y(X, y)
+        X, y = check_X_y(X, y, ensure_all_finite=False)
 
         predictions = self.predict(X)
         accuracy = accuracy_score(y, predictions)

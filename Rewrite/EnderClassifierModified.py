@@ -23,10 +23,8 @@ R = 5
 Rp = 1e-5
 
 class EnderClassifier(BaseEstimator, ClassifierMixin):
-    pool = None
-
-    def __init__(self, dataset_name: str = None, n_rules: int = 100, use_gradient: bool = True, optimized_searching_for_cut: bool = False, nu: float = 1,
-                 sampling: float = 1, verbose: bool = True, random_state: int = 42):
+    def __init__(self, dataset_name = None, n_rules = 100, use_gradient = True, optimized_searching_for_cut = False, nu = 1,
+                 sampling = 1, verbose = True, random_state = 42):
         self.dataset_name: str = dataset_name
         self.n_rules: int = n_rules
         self.rules: list[Rule] = []
@@ -74,15 +72,13 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         self.rule_times = []
         self.rule_total_times = []
         self.attribute_names: list[str] = X.columns
-        X, y = check_X_y(X, y)
+        X, y = check_X_y(X, y, ensure_all_finite=False)
         if X_test is not None and y_test is not None:
-            X_test, y_test = check_X_y(X_test, y_test)
+            X_test, y_test = check_X_y(X_test, y_test, ensure_all_finite=False)
             self.X_test = X_test
             self.y_test = y_test
         self.X = X.astype(np.float64)
         self.y = y.astype(np.intc)
-
-        
 
         self.num_classes: int = len(set(y))
         self.value_of_f: list[list[float]] = [[0 for _ in range(self.num_classes)] for _ in range(len(self.X))]
@@ -631,13 +627,19 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                     self.value_of_f[i][k] += decision[k]
 
     def predict(self, X: np.ndarray, use_effective_rules: bool = True) -> list:
-        X = check_array(X)
+        X = check_array(X, ensure_all_finite=False)
         predictions = [self.predict_instance(x, use_effective_rules) for x in X]
+        predictions = [np.argmax(pred) for pred in predictions]
         return predictions
 
+    def predict_logits(self, X: np.ndarray, use_effective_rules: bool = True) -> np.ndarray:
+        X = check_array(X, ensure_all_finite=False)
+        logits = [self.predict_instance(x, use_effective_rules) for x in X]
+        return np.array(logits)
+
     def predict_proba(self, X: np.ndarray, use_effective_rules: bool = True) -> np.ndarray:
-        X = check_array(X)
-        predictions = self.predict(X, use_effective_rules)
+        X = check_array(X, ensure_all_finite=False)
+        predictions = self.predict_logits(X, use_effective_rules)
         exps = np.exp(predictions - np.max(predictions, axis=1, keepdims=True))
         probabilities = exps / np.sum(exps, axis=1, keepdims=True)
         return probabilities
@@ -650,7 +652,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         return value_of_f_instance
 
     def predict_with_specific_rules(self, X: np.ndarray, rule_indices: list) -> np.ndarray:
-        X = check_array(X)
+        X = check_array(X, ensure_all_finite=False)
         preds = []
         for x in X:
             pred = np.array(self.default_rule)
@@ -662,7 +664,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
     def score(self, X, y):
         check_is_fitted(self, 'is_fitted_')
 
-        X, y = check_X_y(X, y)
+        X, y = check_X_y(X, y, ensure_all_finite=False)
 
         predictions = self.predict(X)
         accuracy = accuracy_score(y, predictions)
