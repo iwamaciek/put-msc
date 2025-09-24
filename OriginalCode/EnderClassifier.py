@@ -1,12 +1,10 @@
 import math
 import random
 import numpy as np
-from collections import Counter, defaultdict
+from collections import Counter
 from tqdm import tqdm
 from matplotlib import pyplot as plt
 import os
-import cython
-import time
 
 
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -22,126 +20,105 @@ INSTANCE_WEIGHT = 1
 R = 5
 Rp = 1e-5
 
+
 class EnderClassifier(BaseEstimator, ClassifierMixin):
-    def __init__(self, dataset_name = None, n_rules = 100, use_gradient = True, optimized_searching_for_cut = False, nu = 1,
-                 sampling = 1, verbose = True, random_state = 42, max_clusters = 4, lambda_reg = 0.0):
-        self.dataset_name: str = dataset_name
-        self.n_rules: int = n_rules
-        self.rules: list[Rule] = []
+    pool = None
 
-        self.use_gradient: bool = use_gradient
-        self.nu: float = nu
-        self.sampling: float = sampling
-        self.max_clusters: int = max_clusters
-        self.lambda_reg: float = lambda_reg
+    def __init__(self, dataset_name=None, n_rules=100, use_gradient=True, optimized_searching_for_cut=False, nu=1,
+                 sampling=1, verbose=True, random_state=42):
+        self.dataset_name = dataset_name
+        self.n_rules = n_rules
+        self.rules = []
 
-        self.verbose: bool = verbose
-        self.random_state: int = random_state
+        self.use_gradient = use_gradient
+        self.nu = nu
+        self.sampling = sampling
+
+        self.verbose = verbose
+        self.random_state = random_state
         random.seed(random_state)
 
-        self.optimized_searching_for_cut: bool = optimized_searching_for_cut
+        self.optimized_searching_for_cut = optimized_searching_for_cut
         self.history = {'accuracy': [],
                         'mean_absolute_error': [],
                         'accuracy_test': [],
                         'mean_absolute_error_test': []}
 
-        self.is_fitted_: bool = False
+        self.is_fitted_ = False
 
-        self.X: np.ndarray = None
-        self.y: np.ndarray = None
-        self.X_test: np.ndarray = None
-        self.y_test: np.ndarray = None
-        self.attribute_names: list[str] = None
-        self.num_classes: int = None
-        self.value_of_f: list[list[float]] = None
-        self.probability: np.ndarray = None
-        self.default_rule: np.ndarray = None
-        self.covered_instances: list[int] = None
-        self.instances_covered_by_current_rule: np.ndarray = None
-        self.last_index_computation_of_empirical_risk: int = None
-        self.gradient: np.ndarray = None
-        self.hessian: np.ndarray = None
-        self.gradients: list[float] = None
-        self.hessians: list[float] = None
-        self.inverted_list: np.ndarray[np.intc] = None
-        self.indices_for_better_cuts: list[int] = None
-        self.max_k: int = None
-        self.effective_rules: list = None
-
-        self.squared_error_array: np.ndarray = None
+        self.X = None
+        self.y = None
+        self.X_test = None
+        self.y_test = None
+        self.attribute_names = None
+        self.num_classes = None
+        self.value_of_f = None
+        self.probability = None
+        self.default_rule = None
+        self.covered_instances = None
+        self.last_index_computation_of_empirical_risk = None
+        self.gradient = None
+        self.hessian = None
+        self.gradients = None
+        self.hessians = None
+        self.inverted_list = None
+        self.indices_for_better_cuts = None
+        self.max_k = None
+        self.effective_rules = None
 
         plt.style.use('ggplot')
 
-    def fit(self, X: np.ndarray, y: np.ndarray, X_test: np.ndarray = None, y_test: np.ndarray = None) -> None:
-        global_start = time.perf_counter()
-        self.rule_times = []
-        self.rule_total_times = []
-        self.attribute_names: list[str] = X.columns
-        X, y = check_X_y(X, y, ensure_all_finite=False)
+    def fit(self, X, y, X_test=None, y_test=None):
+        self.attribute_names = X.columns
+        X, y = check_X_y(X, y)
         if X_test is not None and y_test is not None:
-            X_test, y_test = check_X_y(X_test, y_test, ensure_all_finite=False)
+            X_test, y_test = check_X_y(X_test, y_test)
             self.X_test = X_test
             self.y_test = y_test
-        self.X = X.astype(np.float64)
-        self.y = y.astype(np.intc)
+        self.X = X
+        self.y = y
 
-        self.num_classes: int = len(set(y))
-        self.value_of_f: list[list[float]] = [[0 for _ in range(self.num_classes)] for _ in range(len(self.X))]
-        self.probability: np.ndarray = np.zeros((len(self.X), self.num_classes), dtype=np.float64)
+        self.num_classes = len(set(y))
+        self.value_of_f = [[0 for _ in range(self.num_classes)] for _ in range(len(self.X))]
+        self.probability = [[0 for _ in range(self.num_classes)] for _ in range(len(self.X))]
 
         self.create_rules(X)
 
-        self.is_fitted_: bool = True
-        total_time = time.perf_counter() - global_start
-        if self.verbose:
-            print(f"Total training time: {total_time:.5f} seconds")
+        self.is_fitted_ = True
 
-        return self.rule_times, self.rule_total_times, total_time
+        return None
 
-    def create_rules(self, X: np.ndarray):
+    def create_rules(self, X):
         self.create_inverted_list(X)
-        self.covered_instances: np.ndarray[np.intc] = np.array([1 for _ in range(len(X))], dtype=np.intc)
+        self.covered_instances = [1 for _ in range(len(X))]
 
-        default_start = time.perf_counter()
-        self.default_rule: np.ndarray = self.create_default_rule()
-        if self.verbose:
-            print(f"Default rule creation time: {time.perf_counter() - default_start:.5f} seconds")
-        self.rules: list[Rule] = []
+        self.default_rule = self.create_default_rule()
+        self.rules = []
         self.update_value_of_f(self.default_rule)
         if self.verbose: print("Default rule:", self.default_rule)
         i_rule = 0
-        start_time = time.perf_counter()
         while i_rule < self.n_rules:
             if self.verbose:
                 print('####################################################################################')
                 print(f"Rule: {i_rule + 1}")
-            rule_start = time.perf_counter()
-            self.squared_error_array = self.calculate_squared_errors()
-            self.covered_instances: np.ndarray[np.intc] = self.resampling()
-            rule: Rule = self.create_rule()
+            self.covered_instances = self.resampling()
+            rule = self.create_rule()
 
             if rule:
                 self.update_value_of_f(rule.decision)
                 self.rules.append(rule)
                 i_rule += 1
-            rule_end = time.perf_counter()
-            self.rule_times.append(rule_end - rule_start)
-            self.rule_total_times.append(rule_end - start_time)
-            if self.verbose:
-                print(f"Rule {i_rule} creation time: {self.rule_times[-1]:.5f} seconds, total: {self.rule_total_times[-1]:.5f} seconds")
-            # else:
-            #     break
 
-    def resampling(self) -> np.ndarray[np.intc]:
-        count: Counter = Counter(self.y)
-        total: int = len(self.y)
-        no_examples_to_use: int = math.ceil(len(self.y) * self.sampling)
+    def resampling(self):
+        count = Counter(self.y)
+        total = len(self.y)
+        no_examples_to_use = math.ceil(len(self.y) * self.sampling)
 
-        ones_allocation: dict = {key: round((value / total) * no_examples_to_use) for key, value in count.items()}
+        ones_allocation = {key: round((value / total) * no_examples_to_use) for key, value in count.items()}
 
-        allocated_ones: int = sum(ones_allocation.values())
-        difference: int = no_examples_to_use - allocated_ones
-        keys: list = list(ones_allocation.keys())
+        allocated_ones = sum(ones_allocation.values())
+        difference = no_examples_to_use - allocated_ones
+        keys = list(ones_allocation.keys())
 
         while difference != 0:
             for key in keys:
@@ -155,361 +132,34 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                         ones_allocation[key] -= 1
                         difference += 1
 
-        result: list[int] = [0] * len(self.y)
+        result = [0] * len(self.y)
 
         for key, num_ones in ones_allocation.items():
             indices = [i for i, x in enumerate(self.y) if x == key]
             selected_indices = random.sample(indices, num_ones)
             for index in selected_indices:
                 result[index] = 1
-        return np.array(result, dtype=np.intc)
-    
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    @cython.locals(
-        i=cython.int,
-        j=cython.int,
-        k=cython.int,
-        w=cython.double,
-        y_sum=cython.double,
-        y2_sum=cython.double,
-        mean=cython.double,
-        n=cython.int,
-        prefix_w_view=cython.double[:],
-        prefix_y_view=cython.double[:],
-        prefix_y2_view=cython.double[:],
-        cost_view=cython.double[:,:],
-        dp_view=cython.double[:,:],
-    )
-    def weighted_1d_kmeans(self, y_means: np.ndarray, weights: np.ndarray, max_clusters: int) -> np.float64:
-        """
-        Compute the optimal weighted 1D k-Means clustering cost using dynamic programming.
-        This implements the algorithm described by Song & Zhong (2020), referenced in the paper.
-        
-        Parameters:
-        - y_means: array of weighted means (equivalent point averages).
-        - weights: array of weights (sizes of equivalent point groups).
-        - max_clusters: maximum number of clusters (i.e., leaves).
-        
-        Returns:
-        - Minimum weighted sum of squared errors for up to `max_clusters` clusters.
-        """
-        n = y_means.shape[0]
+        return result
 
-        # Prefix sums for fast interval cost computation
-        prefix_w = np.zeros(n + 1, dtype=np.float64)
-        prefix_y = np.zeros(n + 1, dtype=np.float64)
-        prefix_y2 = np.zeros(n + 1, dtype=np.float64)
-
-        # Compute cumulative sums of weights, weighted values, and weighted squares
-        prefix_w[1:] = np.cumsum(weights)
-        prefix_y[1:] = np.cumsum(weights * y_means)
-        prefix_y2[1:] = np.cumsum(weights * y_means ** 2)
-
-        prefix_w_view = prefix_w
-        prefix_y_view = prefix_y
-        prefix_y2_view = prefix_y2
-
-        # Initialize DP table: dp[k, j] = optimal cost using k clusters for first j elements
-        dp = np.full((max_clusters + 1, n + 1), np.inf, dtype=np.float64)
-        dp_view = dp
-
-        # Precompute cost of each interval [i, j] as a cluster (SSE)
-        cost = np.zeros((n, n), dtype=np.float64)
-        cost_view = cost
-
-        for i in range(n):
-            for j in range(i, n):
-                # Weight of interval [i, j]
-                w = prefix_w_view[j + 1] - prefix_w_view[i]
-                if w == 0:
-                    cost_view[i, j] = 0
-                else:
-                    # Sum of values and squared values in interval
-                    y_sum = prefix_y_view[j + 1] - prefix_y_view[i]
-                    y2_sum = prefix_y2_view[j + 1] - prefix_y2_view[i]
-                    # Compute cluster mean
-                    mean = y_sum / w
-                    # SSE for interval [i, j]: ∑ w_i (y_i - mean)^2
-                    cost_view[i, j] = y2_sum - 2 * mean * y_sum + w * mean * mean
-
-        # Base case: zero clusters for zero points = zero cost
-        dp_view[0, 0] = 0.0
-
-        # Fill DP table
-        for k in range(1, max_clusters + 1):      # number of clusters
-            for j in range(1, n + 1):             # first j points
-                for i in range(j):                # last cluster starts at i
-                    # Choose best split: previous clusters + cost of new cluster
-                    dp_view[k, j] = min(dp_view[k, j], dp_view[k - 1, i] + cost_view[i, j - 1])
-
-        # Return minimum cost among all cluster counts (1..max_clusters)
-        return np.min(dp_view[1:max_clusters + 1, n])
-    
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    def compute_rule_lower_bound(self, X_subset: np.ndarray, residuals: np.ndarray, y_subset: np.ndarray, lambda_reg:float=0.0, max_clusters:int=4):
-        """
-        Compute the k-Means Equivalent Points Lower Bound for a partial rule's coverage.
-        
-        Parameters:
-        - X_subset: (n_samples, n_features) samples covered by current rule
-        - residuals: (n_samples,) residual targets (y - f(x))
-        - lambda_reg: regularization parameter
-        - max_clusters: maximum clusters to simulate (rule complexity)
-        
-        Returns:
-        - lower_bound: float
-        """
-        X_view = X_subset.view([('', X_subset.dtype)] * X_subset.shape[1])
-        _, inv, counts = np.unique(X_view, return_inverse=True, return_counts=True)
-
-        num_groups = counts.shape[0]
-        y_means = np.zeros(num_groups, dtype=np.float64)
-        weights = counts.astype(np.float64)
-
-        for i in range(len(residuals)):
-            y_means[inv[i]] += residuals[i]
-
-        y_means /= weights
-
-        y_means_array: np.ndarray = np.array(y_means, dtype=np.float64)
-        weights_array: np.ndarray = np.array(weights, dtype=np.float64)
-
-        # Lower bound via k-means loss
-        kmeans_loss: np.float64 = self.weighted_1d_kmeans(y_means_array, weights_array, max_clusters)
-
-        # Correction: actual vs compressed squared sums
-        original_total = np.sum(np.square(residuals))
-        compressed_total = np.sum([w * ym ** 2 for w, ym in zip(weights, y_means)])
-        correction = original_total - compressed_total
-
-        return (kmeans_loss + lambda_reg * max_clusters + correction) / len(residuals)
-    
-    @cython.locals(
-            squared_errors=cython.double[:,:],
-            # logits=cython.double[:,:],
-            i=cython.int,
-            rule_id=cython.int,
-            X_view=cython.double[:,:],
-            xsize=cython.int,
-            nrules=cython.int,
-            y_view=cython.int[:],
-            num_classes=cython.int,
-            default_rule=cython.double[:,:],
-            squared_errors_internal=cython.double[:],
-            mses= cython.double[:],
-    )
-    def calculate_squared_errors(self) -> np.ndarray:
-        """
-        Iterates over all samples and all rules and calculates the squared errors for each rule.
-        """
-        def softmax(logits: np.ndarray) -> np.ndarray:
-            e = np.exp(logits - np.max(logits, axis=-1, keepdims=True))
-            return e / np.sum(e, axis=-1, keepdims=True)
-        
-        def one_hot(y: np.ndarray, num_classes: int) -> np.ndarray:
-            return np.eye(num_classes)[y]
-        
-        def mse_from_logits(logits: np.ndarray, y_true: np.ndarray, num_classes: int) -> np.ndarray:
-            probs: np.ndarray = softmax(logits)  # shape: (n_samples, n_classes)
-            y_onehot: np.ndarray = one_hot(y_true, num_classes)  # shape: (n_samples, n_classes)
-            squared_errors_internal: np.ndarray = np.mean((probs - y_onehot) ** 2, axis=1)
-            return squared_errors_internal
-
-        X_view = self.X
-        xsize = len(X_view)
-        nrules = len(self.rules)
-        num_classes = self.num_classes
-        y_view = self.y
-        default_rule = self.default_rule.reshape(1, -1)  # Reshape to (1, num_classes)
-
-        squared_errors = np.zeros((nrules + 1, xsize), dtype=np.float64)
-        mses = mse_from_logits(default_rule, y_view, num_classes)
-        for i in range(xsize):
-            squared_errors[0, i] = mses[i]
-        if self.rules:
-            for rule_id in range(nrules):
-                logits = np.zeros((xsize, num_classes), dtype=np.float64)
-                for i in range(xsize):
-                    logits[i,:] = self.rules[rule_id].classify_instance(self.X[i])
-                mses = mse_from_logits(logits, y_view, num_classes)
-                for i in range(xsize):
-                    squared_errors[rule_id + 1, i] = mses[i]
-                rule_id += 1
-        squared_errors = np.array(squared_errors, dtype=np.float64)
-        if self.verbose:
-            for i in range(len(squared_errors)):
-                if i == 0:
-                    print(f"Default Rule: MSE = {np.mean(squared_errors[i])}")
-                else:
-                    print(f"Rule {i-1}: MSE = {np.mean(squared_errors[i])}")
-        squared_errors_numpy = np.array(squared_errors, dtype=np.float64)
-        # self.squared_error_array = squared_errors_numpy
-        return squared_errors_numpy
-
-
-    def get_best_rule_loss(self, instances_covered_by_current_rule) -> float:
-        """
-        Iterates over all rules and finds which one has the lowest mean squared error loss.
-        Returns:
-        - best_rule_loss: float, the empirical risk of the best rule
-        """
-        best_rule_loss = np.inf
-        a = self.squared_error_array[:, instances_covered_by_current_rule == 1]
-        mses_l = np.mean(a, axis=1)
-        best_rule_loss = np.min(mses_l)
-        return best_rule_loss
-
-    @cython.locals(
-            inv_list=cython.int[:,:],
-            attribute=cython.int,
-            xsize=cython.int,
-            n_attributes=cython.int,
-            X_view=cython.double[:,:],
-            covered_instances_view=cython.int[:],
-            y_view=cython.int[:],
-            max_k=cython.int,
-            use_gradient=cython.bint,
-            probability_view=cython.double[:,:],
-            decisions=cython.int[:],
-            positions=cython.int[:],
-            directions=cython.int[:],
-            values=cython.double[:],
-            empirical_risks=cython.double[:],
-            existss=cython.char[:],
-            gradient=cython.double,
-            abs_gradient=cython.double,
-            hessian=cython.double,
-            best_cut_decision=cython.int,
-            best_cut_position=cython.int,
-            best_cut_direction=cython.int,
-            best_cut_value=cython.double,
-            best_cut_empirical_risk=cython.double,
-            best_cut_exists=cython.bint,
-            temp_empirical_risk=cython.double,
-            GREATER_EQUAL=cython.int,
-            EPSILON=cython.double,
-            previous_position=cython.int,
-            curr_position=cython.int,
-            previous_value=cython.double,
-            cut_direction=cython.int,
-            i=cython.int,
-            j=cython.int,
-            curr_value=cython.double,
-            weight=cython.double,
-            PRE_CHOSEN_K_L=cython.int,
-            INSTANCE_WEIGHT_L=cython.double,
-            Rp_L=cython.double,
-            curr_best_attribute=cython.int,
-    )
-    @cython.boundscheck(False)
     def create_rule(self):
         self.initialize_for_rule()
-        rule: Rule = Rule()
+        rule = Rule()
 
-        best_cut: Cut = Cut()
+        best_cut = Cut()
         best_cut.empirical_risk = 0
 
-        creating: bool = True
-        EPSILON: float = 1e-8
-        PRE_CHOSEN_K_L = PRE_CHOSEN_K
-        INSTANCE_WEIGHT_L = INSTANCE_WEIGHT
-        Rp_L = Rp
-        # count: int = 0
-        n_attributes: int = len(self.X[0])
-        xsize = len(self.X)
-        X_view = self.X
-        y_view = self.y
-        inv_list = self.inverted_list
-        covered_instances_view = self.covered_instances
-        probability_view = self.probability
-        max_k = self.max_k
-        use_gradient = self.use_gradient
+        creating = True
+        EPSILON = 1e-8
+        count = 0
         while creating:
-            # count += 1
+            count += 1
             best_attribute = -1
-            decisions = np.zeros(n_attributes, dtype=np.intc)
-            positions = np.zeros(n_attributes, dtype=np.intc)
-            directions = np.zeros(n_attributes, dtype=np.intc)
-            values = np.zeros(n_attributes, dtype=np.float64)
-            empirical_risks = np.zeros(n_attributes, dtype=np.float64)
-            existss = np.zeros(n_attributes, dtype=np.bool_)
-            for attribute in range(n_attributes):#, nogil=True):
-                best_cut_decision: np.intc = 0
-                best_cut_position: np.intc = -1
-                best_cut_direction: np.intc = 0
-                best_cut_value: np.float64 = 0.0
-                best_cut_empirical_risk: np.float64 = 0.0
-                best_cut_exists: np.bool_ = False
-                temp_empirical_risk: np.float64 = 0.0
-
-                GREATER_EQUAL: np.intc = 1
-                # LESS_EQUAL: np.intc = -1
-                EPSILON: np.float64 = 1e-8
-
-                for j in range(2):
-                    if j == 0:
-                        cut_direction = -1
-                    else:
-                        cut_direction = 1
-                    gradient: np.float64 = 0.0
-                    hessian: np.float64 = 5.0 #R
-
-                    if cut_direction == GREATER_EQUAL:
-                        i: np.intc = xsize - 1 
-                    else:
-                        i: np.intc = 0
-                    previous_position = inv_list[attribute][i]
-                    previous_value = X_view[previous_position][attribute]
-                    while (cut_direction == GREATER_EQUAL and i >= 0) or (cut_direction != GREATER_EQUAL and i < xsize):
-                        curr_position = inv_list[attribute][i]
-                        if covered_instances_view[curr_position] == 1:
-                            if True:
-                                curr_value = X_view[curr_position, attribute]
-                                weight: np.float64 = 1.0
-
-                                if previous_value != curr_value:
-                                    if temp_empirical_risk < best_cut_empirical_risk - EPSILON:
-                                        best_cut_direction = cut_direction
-                                        best_cut_value = (previous_value + curr_value) / 2
-                                        best_cut_empirical_risk = temp_empirical_risk
-                                        best_cut_exists = True
-
-                                if PRE_CHOSEN_K_L:
-                                    if y_view[curr_position] == max_k:
-                                        gradient += INSTANCE_WEIGHT_L * weight
-                                    gradient = gradient - (INSTANCE_WEIGHT_L * weight * probability_view[curr_position, max_k])
-                                    if use_gradient:
-                                        temp_empirical_risk = -gradient
-                                    else:
-                                        hessian = hessian + (INSTANCE_WEIGHT_L * weight * (Rp_L + probability_view[curr_position, max_k] * (1 - probability_view[curr_position, max_k])))
-                                        if gradient < 0:
-                                            abs_gradient = -gradient
-                                        else:
-                                            abs_gradient = gradient
-                                        temp_empirical_risk = -gradient * abs_gradient / hessian
-                                previous_value = X_view[curr_position, attribute]
-                        if cut_direction == GREATER_EQUAL:
-                            i = i - 1
-                        else:
-                            i = i + 1
-                decisions[attribute] = best_cut_decision
-                positions[attribute] = best_cut_position
-                directions[attribute] = best_cut_direction
-                values[attribute] = best_cut_value
-                empirical_risks[attribute] = best_cut_empirical_risk
-                existss[attribute] = best_cut_exists
-
-            for curr_best_attribute in range(n_attributes):
-                if empirical_risks[curr_best_attribute] < best_cut.empirical_risk - EPSILON:
-                    best_cut.decision = decisions[curr_best_attribute]
-                    best_cut.position = positions[curr_best_attribute]
-                    best_cut.direction = directions[curr_best_attribute]
-                    best_cut.value = values[curr_best_attribute]
-                    best_cut.empirical_risk = empirical_risks[curr_best_attribute]
-                    best_cut.exists = existss[curr_best_attribute]
-                    best_attribute = curr_best_attribute
+            cut = Cut()
+            for attribute in range(len(self.X[0])):
+                cut = self.find_best_cut(attribute)
+                if cut.empirical_risk < best_cut.empirical_risk - EPSILON:
+                    best_cut = cut
+                    best_attribute = attribute
 
             if best_attribute == -1 or not best_cut.exists:
                 creating = False
@@ -517,25 +167,8 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
                 rule.add_condition(best_attribute, best_cut.value, best_cut.direction,
                                    self.attribute_names[best_attribute])
                 self.mark_covered_instances(best_attribute, best_cut)
-                # Verify lower bound for the empirical risk with more cuts
-                # start = time()
-                lower_bound = self.compute_rule_lower_bound(
-                    X_subset=self.X[self.instances_covered_by_current_rule == 1],
-                    residuals=[y_view[i] - self.value_of_f[i][max_k] for i in range(xsize) if
-                               self.instances_covered_by_current_rule[i] == 1],
-                    y_subset=self.y[self.instances_covered_by_current_rule == 1],
-                    lambda_reg=self.lambda_reg, max_clusters=self.max_clusters)
-                # if self.verbose:
-                #     print(f"Lower bound computed in {time() - start:.4f} seconds, value: {lower_bound}")
-                best_rule_loss = self.get_best_rule_loss(self.instances_covered_by_current_rule)
-                if lower_bound < best_rule_loss:
-                    if False:
-                        print(f"Lower bound {lower_bound} is less than empirical risk {best_rule_loss} for rule with {len(rule.conditions)} conditions. Continuing search.")
-                else:
-                    if self.verbose and False:
-                        print(f"Lower bound {lower_bound} is greater than or equal to empirical risk {best_rule_loss} for rule with {len(rule.conditions)} conditions. Stopping search.")
-                    creating = False
         if best_cut.exists:
+
             decision = self.compute_decision()
             if decision is None:
                 return None
@@ -545,9 +178,9 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
             rule.decision = decision
             if self.verbose:
                 for i_condition in range(len(rule.conditions)):
-                    if rule.conditions[i_condition][1] == -np.inf:
+                    if rule.conditions[i_condition][1] == -99999999999999999:
                         print(f'\t{rule.attribute_names[i_condition]} <= {rule.conditions[i_condition][2]}')
-                    elif rule.conditions[i_condition][2] == np.inf:
+                    elif rule.conditions[i_condition][2] == 99999999999999999:
                         print(f'\t{rule.attribute_names[i_condition]} >= {rule.conditions[i_condition][1]}')
                     else:
                         print(
@@ -559,21 +192,21 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
             return rule
         else:
             return None
-        
-    def find_best_cut(self, attribute: int) -> Cut:
+
+    def find_best_cut(self, attribute):
         best_cut = Cut()
         best_cut.position = -1
         best_cut.exists = False
         best_cut.empirical_risk = 0
 
-        temp_empirical_risk: float = 0
+        temp_empirical_risk = 0
 
-        GREATER_EQUAL: int = 1
-        LESS_EQUAL: int = -1
-        EPSILON: float = 1e-8
+        GREATER_EQUAL = 1
+        LESS_EQUAL = -1
+        EPSILON = 1e-8
 
-        empirical_risks: list[float] = []
-        indices_to_check: list[int] = []
+        empirical_risks = []
+        indices_to_check = []
         for cut_direction in [-1, 1]:
             self.initialize_for_cut()
 
@@ -692,14 +325,10 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
 
         return best_cut
 
-    def mark_covered_instances(self, best_attribute: int, cut: Cut):
+    def mark_covered_instances(self, best_attribute, cut):
         for i in range(len(self.X)):
-            value = self.X[i][best_attribute]
-            if (self.instances_covered_by_current_rule[i] == 1) and ((value >= cut.value and cut.direction == 1) or (value <= cut.value and cut.direction == -1)):
-                self.instances_covered_by_current_rule[i] = 1
-            else:
-                self.instances_covered_by_current_rule[i] = 0
             if self.covered_instances[i] != -1:
+                value = self.X[i][best_attribute]
                 if (value < cut.value and cut.direction == 1) or (value > cut.value and cut.direction == -1):
                     self.covered_instances[i] = -1
 
@@ -709,7 +338,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         self.gradients = [0 for _ in range(self.num_classes)]
         self.hessians = [R for _ in range(self.num_classes)]
 
-    def compute_current_empirical_risk_optimized(self, next_position: np.int64, weight: float) -> tuple[float, float]:
+    def compute_current_empirical_risk_optimized(self, next_position, weight):
         if PRE_CHOSEN_K:
             gradient_difference = 0
             if self.y[next_position] == self.max_k:
@@ -727,7 +356,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         else:
             raise
 
-    def compute_current_empirical_risk(self, next_position: np.int64, weight: float) -> float:
+    def compute_current_empirical_risk(self, next_position, weight):
         if PRE_CHOSEN_K:
             if self.y[next_position] == self.max_k:
                 self.gradient += INSTANCE_WEIGHT * weight
@@ -741,14 +370,14 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         else:
             raise
 
-    def create_default_rule(self) -> np.ndarray:
+    def create_default_rule(self):
         self.initialize_for_rule()
-        decision: np.ndarray = self.compute_decision()
+        decision = self.compute_decision()
         for i in range(self.num_classes):
             decision[i] *= self.nu
         return decision
 
-    def compute_decision(self) -> np.ndarray | None:
+    def compute_decision(self):
         if PRE_CHOSEN_K:
             hessian = R
             gradient = 0
@@ -767,14 +396,11 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
             alpha_nr = gradient / hessian
             decision = [- alpha_nr / self.num_classes for _ in range(self.num_classes)]
             decision[self.max_k] = alpha_nr * (self.num_classes - 1) / self.num_classes
-            decision = np.array(decision, dtype=np.float64)
             return decision
         else:
             raise
 
     def initialize_for_rule(self):
-        self.instances_covered_by_current_rule = np.ones(len(self.X), dtype=int)
-
         if PRE_CHOSEN_K:
             self.gradients = [0 for _ in range(self.num_classes)]
             self.hessians = [R for _ in range(self.num_classes)]
@@ -809,45 +435,32 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
 
     def create_inverted_list(self, X):
         import numpy as np
-        X: np.ndarray = np.array(X)
-        sorted_indices = np.argsort(X, axis=0).astype(np.intc)
+        X = np.array(X)
+        sorted_indices = np.argsort(X, axis=0)
         self.inverted_list = sorted_indices.T
         temp = self.inverted_list.copy()
         temp = np.array([[self.y[temp[i][j]] for j in range(len(temp[0]))] for i in range(len(temp))])
 
-    def update_value_of_f(self, decision: np.ndarray) -> None:
+    def update_value_of_f(self, decision):
         for i in range(len(self.X)):
             if self.covered_instances[i] >= 0:
                 for k in range(self.num_classes):
                     self.value_of_f[i][k] += decision[k]
 
-    def predict(self, X: np.ndarray, use_effective_rules: bool = True) -> list:
-        X = check_array(X, ensure_all_finite=False)
+    def predict(self, X, use_effective_rules=True):
+        X = check_array(X)
         predictions = [self.predict_instance(x, use_effective_rules) for x in X]
-        predictions = [np.argmax(pred) for pred in predictions]
         return predictions
 
-    def predict_logits(self, X: np.ndarray, use_effective_rules: bool = True) -> np.ndarray:
-        X = check_array(X, ensure_all_finite=False)
-        logits = [self.predict_instance(x, use_effective_rules) for x in X]
-        return np.array(logits)
-
-    def predict_proba(self, X: np.ndarray, use_effective_rules: bool = True) -> np.ndarray:
-        X = check_array(X, ensure_all_finite=False)
-        predictions = self.predict_logits(X, use_effective_rules)
-        exps = np.exp(predictions - np.max(predictions, axis=1, keepdims=True))
-        probabilities = exps / np.sum(exps, axis=1, keepdims=True)
-        return probabilities
-
-    def predict_instance(self, x: np.ndarray, use_effective_rules: bool) -> np.ndarray:
+    def predict_instance(self, x, use_effective_rules):
         value_of_f_instance = np.array(self.default_rule)
         rules = self.rules
         for rule in rules:
             value_of_f_instance += rule.classify_instance(x)
         return value_of_f_instance
 
-    def predict_with_specific_rules(self, X: np.ndarray, rule_indices: list) -> np.ndarray:
-        X = check_array(X, ensure_all_finite=False)
+    def predict_with_specific_rules(self, X, rule_indices):
+        X = check_array(X)
         preds = []
         for x in X:
             pred = np.array(self.default_rule)
@@ -859,7 +472,7 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
     def score(self, X, y):
         check_is_fitted(self, 'is_fitted_')
 
-        X, y = check_X_y(X, y, ensure_all_finite=False)
+        X, y = check_X_y(X, y)
 
         predictions = self.predict(X)
         accuracy = accuracy_score(y, predictions)

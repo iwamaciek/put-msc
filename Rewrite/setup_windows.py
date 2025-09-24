@@ -30,8 +30,7 @@ ext_modules = [
     Extension(
         "EnderClassifierBoundedFastPara",
         ["EnderClassifierBoundedFastPara.py"],
-        extra_compile_args=["-fopenmp"],
-        extra_link_args=["-fopenmp"],
+        extra_compile_args=["/openmp"],
         language_level=3,
         annotate=False
     )
@@ -59,8 +58,7 @@ ext_modules = [
     Extension(
         "EnderClassifierModifiedPara",
         ["EnderClassifierModifiedPara.py"],
-        extra_compile_args=["-fopenmp"],
-        extra_link_args=["-fopenmp"],
+        extra_compile_args=["/openmp"],
         language_level=3,
         annotate=False
     )

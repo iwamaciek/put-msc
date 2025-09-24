@@ -184,12 +184,26 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         dp_view=cython.double[:,:],
     )
     def weighted_1d_kmeans(self, y_means: np.ndarray, weights: np.ndarray, max_clusters: int) -> np.float64:
+        """
+        Compute the optimal weighted 1D k-Means clustering cost using dynamic programming.
+        This implements the algorithm described by Song & Zhong (2020), referenced in the paper.
+        
+        Parameters:
+        - y_means: array of weighted means (equivalent point averages).
+        - weights: array of weights (sizes of equivalent point groups).
+        - max_clusters: maximum number of clusters (i.e., leaves).
+        
+        Returns:
+        - Minimum weighted sum of squared errors for up to `max_clusters` clusters.
+        """
         n = y_means.shape[0]
 
+        # Prefix sums for fast interval cost computation
         prefix_w = np.zeros(n + 1, dtype=np.float64)
         prefix_y = np.zeros(n + 1, dtype=np.float64)
         prefix_y2 = np.zeros(n + 1, dtype=np.float64)
 
+        # Compute cumulative sums of weights, weighted values, and weighted squares
         prefix_w[1:] = np.cumsum(weights)
         prefix_y[1:] = np.cumsum(weights * y_means)
         prefix_y2[1:] = np.cumsum(weights * y_means ** 2)
@@ -198,29 +212,40 @@ class EnderClassifier(BaseEstimator, ClassifierMixin):
         prefix_y_view = prefix_y
         prefix_y2_view = prefix_y2
 
+        # Initialize DP table: dp[k, j] = optimal cost using k clusters for first j elements
         dp = np.full((max_clusters + 1, n + 1), np.inf, dtype=np.float64)
         dp_view = dp
 
+        # Precompute cost of each interval [i, j] as a cluster (SSE)
         cost = np.zeros((n, n), dtype=np.float64)
         cost_view = cost
 
         for i in range(n):
             for j in range(i, n):
+                # Weight of interval [i, j]
                 w = prefix_w_view[j + 1] - prefix_w_view[i]
                 if w == 0:
                     cost_view[i, j] = 0
                 else:
+                    # Sum of values and squared values in interval
                     y_sum = prefix_y_view[j + 1] - prefix_y_view[i]
                     y2_sum = prefix_y2_view[j + 1] - prefix_y2_view[i]
+                    # Compute cluster mean
                     mean = y_sum / w
+                    # SSE for interval [i, j]: ∑ w_i (y_i - mean)^2
                     cost_view[i, j] = y2_sum - 2 * mean * y_sum + w * mean * mean
 
+        # Base case: zero clusters for zero points = zero cost
         dp_view[0, 0] = 0.0
-        for k in range(1, max_clusters + 1):
-            for j in range(1, n + 1):
-                for i in range(j):
+
+        # Fill DP table
+        for k in range(1, max_clusters + 1):      # number of clusters
+            for j in range(1, n + 1):             # first j points
+                for i in range(j):                # last cluster starts at i
+                    # Choose best split: previous clusters + cost of new cluster
                     dp_view[k, j] = min(dp_view[k, j], dp_view[k - 1, i] + cost_view[i, j - 1])
 
+        # Return minimum cost among all cluster counts (1..max_clusters)
         return np.min(dp_view[1:max_clusters + 1, n])
     
     @cython.boundscheck(False)

@@ -1,10 +1,6 @@
 *__pycache__/
 *build/
 mscenv/
-NewCode/
-OriginalCode/
-Testing/
-*Oldpys
 *.c
 *.so
 *.html
